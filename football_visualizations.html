@@ -1,0 +1,1615 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Match Analysis - StatsBomb Data Visualizations</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/d3-hexbin.v0.2.min.js"></script>
+    <script src="https://d3js.org/d3-contour.v4.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0d0d0d;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .control-group {
+            display: inline-block;
+            margin-right: 20px;
+            margin-bottom: 10px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .control-group select,
+        .control-group input {
+            padding: 8px 12px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-size: 14px;
+            min-width: 200px;
+        }
+
+        .viz-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .viz-title {
+            font-size: 1.8em;
+            color: #333;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .viz-description {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        svg {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .pitch {
+            fill: #1a472a;
+            stroke: white;
+            stroke-width: 2;
+        }
+
+        .pitch-line {
+            stroke: white;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 13px;
+            max-width: 250px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .legend {
+            font-size: 12px;
+        }
+
+        .legend-item {
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        .legend-item:hover {
+            opacity: 0.7;
+        }
+
+        .legend-item.inactive {
+            opacity: 0.3;
+        }
+
+        .stats-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .heatmap-cell {
+            transition: opacity 0.2s;
+        }
+
+        .heatmap-cell:hover {
+            stroke: #ffeb3b;
+            stroke-width: 3;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .viz-section {
+            animation: fadeIn 0.5s ease-out;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>⚽ Football Match Analysis Dashboard</h1>
+        <p class="subtitle">StatsBomb Event-Level Data Visualization | Team-11 Project</p>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="match-select">Select Match:</label>
+                <select id="match-select">
+                    <option value="sample">Sample Match - Team A vs Team B</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="team-select">Select Team:</label>
+                <select id="team-select">
+                    <option value="all">Both Teams</option>
+                    <option value="team1">Team A</option>
+                    <option value="team2">Team B</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="file-input">Upload StatsBomb JSON:</label>
+                <input type="file" id="file-input" accept=".json">
+            </div>
+        </div>
+
+        <!-- Visualization 1: Turnover Locations -->
+        <div class="viz-section" id="viz1">
+            <h2 class="viz-title">1. Turnover Locations and Structural Vulnerabilities</h2>
+            <p class="viz-description">
+                This grid-based heatmap shows where teams lose possession. A purple sequential scale highlights
+                high-turnover zones,
+                while individual circles show each turnover event, color-coded by type. You can optionally overlay
+                tactical zones
+                (Zone 14 and half-spaces) and see zone details on hover for deeper tactical context.
+            </p>
+            <div class="control-group" style="margin-bottom: 15px;">
+                <label>Pitch Grids (with labels):</label>
+                <label style="font-weight: 400; margin-right: 10px;">
+                    <input type="checkbox" id="toggle-transitional-18">
+                    Transitional 18 Grid
+                </label>
+                <label style="font-weight: 400; margin-right: 10px;">
+                    <input type="checkbox" id="toggle-positional-20">
+                    Positional 20 Grid
+                </label>
+            </div>
+            <div id="turnover-viz"></div>
+            <div class="stats-panel" id="turnover-stats"></div>
+        </div>
+
+        <!-- Visualization 2: Shot Origin -->
+        <div class="viz-section" id="viz2">
+            <h2 class="viz-title">2. Shot Origin and Attacking Biases</h2>
+            <p class="viz-description">
+                Explore where teams generate shooting opportunities and identify spatial biases in attacking approach.
+                Symbols are sized by xG (expected goals), with goals emphasised using a distinct star shape and a subtle
+                jitter
+                applied to overlapping locations so repeated shots from similar spots remain visible.
+            </p>
+            <div id="shot-viz"></div>
+            <div class="stats-panel" id="shot-stats"></div>
+        </div>
+
+        <!-- Visualization 3: Defensive Pressure -->
+        <div class="viz-section" id="viz3">
+            <h2 class="viz-title">3. Defensive Actions by Zone</h2>
+            <p class="viz-description">
+                Pitch is divided into three defensive zones (Defensive, Middle, Attacking thirds). Each defensive action
+                is represented
+                with an intuitive icon (e.g., 🥾 for tackles, 🛡️ for blocks). Successful actions use solid fills, while
+                failed ones are
+                shown as hollow circles so success rate is legible even without zooming. Hover over icons for details
+                and use the filters
+                and legend to reduce clutter.
+            </p>
+            <div class="control-group" id="defensive-filters" style="margin-bottom: 15px;">
+                <label>Show defensive actions:</label>
+                <label style="font-weight: 400; margin-right: 10px;">
+                    <input type="checkbox" id="show-successful-def" checked>
+                    Successful
+                </label>
+                <label style="font-weight: 400;">
+                    <input type="checkbox" id="show-failed-def" checked>
+                    Failed
+                </label>
+            </div>
+            <div id="defensive-viz"></div>
+            <div class="stats-panel" id="defensive-stats"></div>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        // Football pitch dimensions (StatsBomb uses 120x80 yards)
+        const PITCH_LENGTH = 120;
+        const PITCH_WIDTH = 80;
+
+        // Visualization dimensions
+        const margin = { top: 30, right: 280, bottom: 30, left: 30 };
+        const width = 1200;
+        const height = 800;
+
+        // Color schemes - High Contrast against Red Heatmap for Visualization 1
+        const eventColors = {
+            'Miscontrol': '#00BCD4',        // Cyan
+            'Dispossessed': '#2196F3',      // Blue
+            'Duel Lost': '#4CAF50',         // Green
+            'Pass Intercepted': '#9C27B0',  // Purple
+            'Bad Touch': '#FFEB3B',         // Yellow
+            'Error': '#FFFFFF'              // White
+        };
+
+        const shotColors = {
+            'Goal': '#27ae60',              // Green
+            'Saved': '#3498db',             // Blue
+            'Blocked': '#7f8c8d',           // Dark Gray
+            'Off Target': '#e8491d',        // Red-Orange
+            'Post': '#f4d03f'               // Yellow
+        };
+
+        const defensiveColors = {
+            'Pressure': '#5dade2',          // Light Blue
+            'Tackle': '#2ecc71',            // Lime Green
+            'Interception': '#9b59b6',      // Purple
+            'Block': '#d68910',             // Amber
+            'Ball Recovery': '#1abc9c',     // Turquoise
+            'Clearance': '#f8b500',         // Gold
+            'Duel': '#ec7063'               // Salmon/Pink-Red
+        };
+
+        // Iconography for defensive actions (intuitive emoji-style icons)
+        const defensiveIcons = {
+            'Pressure': '↗',
+            'Tackle': '🥾',
+            'Interception': '✂',
+            'Block': '🛡️',
+            'Ball Recovery': '♻️',
+            'Clearance': '🚀',
+            'Duel': '⚔️'
+        };
+
+        // Sample data generator (replace with actual StatsBomb data)
+        function generateSampleTurnoverData() {
+            const data = [];
+            const eventTypes = Object.keys(eventColors);
+
+            // Generate clusters in typical vulnerability zones
+            const vulnerabilityZones = [
+                { x: 30, y: 40, radius: 15, count: 25 }, // Own half center
+                { x: 50, y: 15, radius: 10, count: 15 }, // Left flank midfield
+                { x: 50, y: 65, radius: 10, count: 15 }, // Right flank midfield
+                { x: 70, y: 40, radius: 12, count: 20 }, // Attacking third center
+            ];
+
+            vulnerabilityZones.forEach(zone => {
+                for (let i = 0; i < zone.count; i++) {
+                    const angle = Math.random() * 2 * Math.PI;
+                    const r = Math.random() * zone.radius;
+                    data.push({
+                        x: zone.x + r * Math.cos(angle),
+                        y: zone.y + r * Math.sin(angle),
+                        type: eventTypes[Math.floor(Math.random() * eventTypes.length)],
+                        player: `Player ${Math.floor(Math.random() * 11) + 1}`,
+                        minute: Math.floor(Math.random() * 90),
+                        team: Math.random() > 0.5 ? 'Team A' : 'Team B'
+                    });
+                }
+            });
+
+            return data;
+        }
+
+        function generateSampleShotData() {
+            const data = [];
+            const outcomes = Object.keys(shotColors);
+
+            // Generate shots with xG correlation to position
+            for (let i = 0; i < 60; i++) {
+                const x = 90 + Math.random() * 25;
+                const y = 20 + Math.random() * 40;
+
+                // Calculate xG based on distance to goal and angle
+                const distToGoal = Math.sqrt(Math.pow(120 - x, 2) + Math.pow(40 - y, 2));
+                const baseXG = Math.max(0.05, 1 - (distToGoal / 50));
+                const xG = baseXG + (Math.random() - 0.5) * 0.3;
+
+                data.push({
+                    x: x,
+                    y: y,
+                    xG: Math.max(0.01, Math.min(0.99, xG)),
+                    outcome: outcomes[Math.floor(Math.random() * outcomes.length)],
+                    technique: Math.random() > 0.7 ? 'Header' : 'Foot',
+                    player: `Player ${Math.floor(Math.random() * 11) + 1}`,
+                    minute: Math.floor(Math.random() * 90),
+                    team: Math.random() > 0.3 ? 'Team A' : 'Team B'
+                });
+            }
+
+            return data;
+        }
+
+        function generateSampleDefensiveData() {
+            const data = [];
+            const actionTypes = Object.keys(defensiveColors);
+
+            // Generate defensive actions in typical zones
+            const defensiveZones = [
+                { x: 20, y: 40, radius: 15, count: 30, type: 'Low Block' },
+                { x: 40, y: 25, radius: 12, count: 25, type: 'Mid Press' },
+                { x: 40, y: 55, radius: 12, count: 25, type: 'Mid Press' },
+                { x: 70, y: 40, radius: 18, count: 35, type: 'High Press' },
+            ];
+
+            defensiveZones.forEach(zone => {
+                for (let i = 0; i < zone.count; i++) {
+                    const angle = Math.random() * 2 * Math.PI;
+                    const r = Math.random() * zone.radius;
+                    data.push({
+                        x: zone.x + r * Math.cos(angle),
+                        y: zone.y + r * Math.sin(angle),
+                        type: actionTypes[Math.floor(Math.random() * actionTypes.length)],
+                        success: Math.random() > 0.4,
+                        player: `Player ${Math.floor(Math.random() * 11) + 1}`,
+                        minute: Math.floor(Math.random() * 90),
+                        team: Math.random() > 0.5 ? 'Team A' : 'Team B',
+                        zone: zone.type
+                    });
+                }
+            });
+
+            return data;
+        }
+
+        // Draw football pitch
+        function drawPitch(svg, width, height) {
+            const scaleX = d3.scaleLinear().domain([0, PITCH_LENGTH]).range([0, width]);
+            const scaleY = d3.scaleLinear().domain([0, PITCH_WIDTH]).range([0, height]);
+
+            const pitch = svg.append('g').attr('class', 'pitch-group');
+
+            // Outer rectangle
+            pitch.append('rect')
+                .attr('class', 'pitch')
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('width', width)
+                .attr('height', height);
+
+            // Center line
+            pitch.append('line')
+                .attr('class', 'pitch-line')
+                .attr('x1', scaleX(60))
+                .attr('y1', 0)
+                .attr('x2', scaleX(60))
+                .attr('y2', height);
+
+            // Center circle
+            pitch.append('circle')
+                .attr('class', 'pitch-line')
+                .attr('cx', scaleX(60))
+                .attr('cy', scaleY(40))
+                .attr('r', scaleX(9.15));
+
+            // Penalty areas
+            [0, 120].forEach((side, i) => {
+                const isLeft = i === 0;
+                const x = isLeft ? 0 : scaleX(120);
+                const boxWidth = scaleX(18);
+                const sixYardWidth = scaleX(6);
+
+                // Penalty box
+                pitch.append('rect')
+                    .attr('class', 'pitch-line')
+                    .attr('x', isLeft ? x : x - boxWidth)
+                    .attr('y', scaleY(22))
+                    .attr('width', boxWidth)
+                    .attr('height', scaleY(36));
+
+                // Six-yard box
+                pitch.append('rect')
+                    .attr('class', 'pitch-line')
+                    .attr('x', isLeft ? x : x - sixYardWidth)
+                    .attr('y', scaleY(30))
+                    .attr('width', sixYardWidth)
+                    .attr('height', scaleY(20));
+
+                // Penalty spot
+                pitch.append('circle')
+                    .attr('class', 'pitch-line')
+                    .attr('cx', isLeft ? scaleX(12) : scaleX(108))
+                    .attr('cy', scaleY(40))
+                    .attr('r', 3);
+
+                // Goal
+                pitch.append('rect')
+                    .attr('class', 'pitch-line')
+                    .attr('x', isLeft ? -2 : x)
+                    .attr('y', scaleY(36))
+                    .attr('width', 2)
+                    .attr('height', scaleY(8))
+                    .attr('fill', 'white');
+            });
+
+            return { scaleX, scaleY };
+        }
+
+        // Helper to classify tactical zones for the tooltip
+        function getTacticalZoneLabel(x, y) {
+            // Determine Positional Grid Label
+            const pColWidth = PITCH_LENGTH / 4;
+            const pRowHeights = [18, 14, 16, 14, 18];
+            const pRowNames = ['Left Wide', 'Left Half-space', 'Center', 'Right Half-space', 'Right Wide'];
+            const pColNames = ['Build-up', 'Progression', 'Creation', 'Finishing'];
+
+            let colIdx = Math.min(3, Math.floor(x / pColWidth));
+            let currentY = 0;
+            let rowIdx = 0;
+            for (let i = 0; i < 5; i++) {
+                currentY += pRowHeights[i];
+                if (y <= currentY || i === 4) {
+                    rowIdx = i;
+                    break;
+                }
+            }
+
+            // Determine Transitional Grid Label
+            const tColIdx = Math.min(5, Math.floor(x / (PITCH_LENGTH / 6)));
+            const tRowIdx = Math.min(2, Math.floor(y / (PITCH_WIDTH / 3)));
+            const zoneNum = tColIdx * 3 + tRowIdx + 1;
+
+            return `Positional: ${pColNames[colIdx]} ${pRowNames[rowIdx]}<br>Transitional: Zone ${zoneNum}`;
+        }
+
+        // Visualization 1: Turnover Locations - REDESIGNED FOR CLARITY
+        function createTurnoverVisualization(data) {
+            const container = d3.select('#turnover-viz');
+            container.selectAll('*').remove();
+
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const { scaleX, scaleY } = drawPitch(g, width, height);
+
+            // Create tooltip
+            const tooltip = d3.select('#tooltip');
+
+            // Optional tactical overlays
+            const transitionalOverlayGroup = g.append('g').attr('class', 'transitional-zones');
+            const positionalOverlayGroup = g.append('g').attr('class', 'positional-zones');
+
+            // Generate Transitional 18 Zones (6 columns x 3 rows)
+            const transitionalZones = [];
+            const tColWidth = PITCH_LENGTH / 6;
+            const tRowHeight = PITCH_WIDTH / 3;
+            for (let i = 0; i < 6; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const zoneNum = i * 3 + j + 1; // Column-major: Zone 14 is Col 5 (i=4), Row 2 (j=1)
+                    transitionalZones.push({
+                        name: `Zone ${zoneNum}`,
+                        description: `Transitional grid zone ${zoneNum}`,
+                        xMin: i * tColWidth, xMax: (i + 1) * tColWidth,
+                        yMin: j * tRowHeight, yMax: (j + 1) * tRowHeight,
+                        stroke: 'white'
+                    });
+                }
+            }
+
+            // Generate Positional 20 Zones (4 columns x 5 rows)
+            const positionalZones = [];
+            const pColWidth = PITCH_LENGTH / 4;
+            // Rows: Left Wide (18), Left Half-space (14), Center (16), Right Half-space (14), Right Wide (18)
+            const pRowHeights = [18, 14, 16, 14, 18];
+            const pRowNames = ['Left Wide', 'Left Half-space', 'Center', 'Right Half-space', 'Right Wide'];
+            const pColNames = ['Build-up', 'Progression', 'Creation', 'Finishing'];
+
+            for (let i = 0; i < 4; i++) {
+                let currentY = 0;
+                for (let j = 0; j < 5; j++) {
+                    positionalZones.push({
+                        name: `${pColNames[i]}\n${pRowNames[j]}`,
+                        description: `Positional grid: ${pColNames[i]} phase in ${pRowNames[j]}`,
+                        xMin: i * pColWidth, xMax: (i + 1) * pColWidth,
+                        yMin: currentY, yMax: currentY + pRowHeights[j],
+                        stroke: 'rgba(255, 255, 255, 0.8)'
+                    });
+                    currentY += pRowHeights[j];
+                }
+            }
+
+            function drawGrid(group, zones) {
+                group.selectAll('rect')
+                    .data(zones)
+                    .join('rect')
+                    .attr('x', d => scaleX(d.xMin))
+                    .attr('y', d => scaleY(d.yMin))
+                    .attr('width', d => scaleX(d.xMax) - scaleX(d.xMin))
+                    .attr('height', d => scaleY(d.yMax) - scaleY(d.yMin))
+                    .attr('fill', 'none')
+                    .attr('stroke', d => d.stroke)
+                    .attr('stroke-width', 1.5)
+                    .attr('stroke-dasharray', '4,4')
+                    .style('pointer-events', 'all')
+                    .on('mouseover', function (event, d) {
+                        tooltip.style('opacity', 1)
+                            .html(`<strong>${d.name.replace('\\n', '<br>')}</strong><br>${d.description}`)
+                            .style('left', (event.pageX + 10) + 'px')
+                            .style('top', (event.pageY - 10) + 'px');
+                    })
+                    .on('mouseout', function () {
+                        tooltip.style('opacity', 0);
+                    });
+
+                // Add labels
+                group.selectAll('text')
+                    .data(zones)
+                    .join('text')
+                    .attr('x', d => (scaleX(d.xMin) + scaleX(d.xMax)) / 2)
+                    .attr('y', d => scaleY(d.yMin) + 14)
+                    .attr('text-anchor', 'middle')
+                    .attr('fill', 'white')
+                    .attr('font-size', '10px')
+                    .attr('font-weight', 'bold')
+                    .attr('stroke', 'rgba(0,0,0,0.6)')
+                    .attr('stroke-width', 2)
+                    .attr('paint-order', 'stroke')
+                    // Handle multiline names
+                    .each(function (d) {
+                        if (d.name.includes('\\n')) {
+                            const el = d3.select(this);
+                            const lines = d.name.split('\\n');
+                            el.text('');
+                            for (let i = 0; i < lines.length; i++) {
+                                el.append('tspan')
+                                    .attr('x', (scaleX(d.xMin) + scaleX(d.xMax)) / 2)
+                                    .attr('dy', i === 0 ? 0 : 12)
+                                    .text(lines[i]);
+                            }
+                        } else {
+                            d3.select(this).text(d.name);
+                        }
+                    });
+            }
+
+            drawGrid(transitionalOverlayGroup, transitionalZones);
+            drawGrid(positionalOverlayGroup, positionalZones);
+
+            // Wire up handlers and set initial state
+            const tToggle = document.getElementById('toggle-transitional-18');
+            const pToggle = document.getElementById('toggle-positional-20');
+
+            if (tToggle) {
+                transitionalOverlayGroup.style('display', tToggle.checked ? 'block' : 'none');
+                d3.select(tToggle).on('change.transitional', function () {
+                    d3.select('#turnover-viz').selectAll('.transitional-zones').style('display', this.checked ? 'block' : 'none');
+                    // Mutual exclusion
+                    if (this.checked && pToggle) {
+                        pToggle.checked = false;
+                        d3.select('#turnover-viz').selectAll('.positional-zones').style('display', 'none');
+                    }
+                });
+            }
+            if (pToggle) {
+                positionalOverlayGroup.style('display', pToggle.checked ? 'block' : 'none');
+                d3.select(pToggle).on('change.positional', function () {
+                    d3.select('#turnover-viz').selectAll('.positional-zones').style('display', this.checked ? 'block' : 'none');
+                    // Mutual exclusion
+                    if (this.checked && tToggle) {
+                        tToggle.checked = false;
+                        d3.select('#turnover-viz').selectAll('.transitional-zones').style('display', 'none');
+                    }
+                });
+            }
+
+            // Create grid zones for heatmap (10x10 grid)
+            const gridSize = 10;
+            const cellWidth = width / gridSize;
+            const cellHeight = height / gridSize;
+
+            // Aggregate turnovers by grid cell
+            const gridData = [];
+            for (let i = 0; i < gridSize; i++) {
+                for (let j = 0; j < gridSize; j++) {
+                    const xMin = (PITCH_LENGTH / gridSize) * i;
+                    const xMax = (PITCH_LENGTH / gridSize) * (i + 1);
+                    const yMin = (PITCH_WIDTH / gridSize) * j;
+                    const yMax = (PITCH_WIDTH / gridSize) * (j + 1);
+
+                    const cellTurnovers = data.filter(d =>
+                        d.x >= xMin && d.x < xMax && d.y >= yMin && d.y < yMax
+                    );
+
+                    if (cellTurnovers.length > 0) {
+                        gridData.push({
+                            col: i,
+                            row: j,
+                            count: cellTurnovers.length,
+                            events: cellTurnovers
+                        });
+                    }
+                }
+            }
+
+            // Color scale for grid intensity (red scale)
+            const intensityScale = d3.scaleSequential(d3.interpolateReds)
+                .domain([0, d3.max(gridData, d => d.count)]);
+
+            // Draw grid cells
+            g.append('g')
+                .attr('class', 'grid')
+                .selectAll('rect')
+                .data(gridData)
+                .join('rect')
+                .attr('x', d => d.col * cellWidth)
+                .attr('y', d => d.row * cellHeight)
+                .attr('width', cellWidth)
+                .attr('height', cellHeight)
+                .attr('fill', d => intensityScale(d.count))
+                .attr('opacity', 0)
+                .attr('rx', 3)
+                .style('cursor', 'pointer')
+                .on('mouseover', function (event, d) {
+                    d3.select(this)
+                        .attr('stroke', 'white')
+                        .attr('stroke-width', 3);
+
+                    const typeBreakdown = d3.rollup(d.events, v => v.length, e => e.type);
+                    const types = Array.from(typeBreakdown.entries())
+                        .map(([type, count]) => `${type}: ${count}`)
+                        .join('<br>');
+                    const xCenter = (d.col + 0.5) * (PITCH_LENGTH / gridSize);
+                    const yCenter = (d.row + 0.5) * (PITCH_WIDTH / gridSize);
+                    const zoneLabel = getTacticalZoneLabel(xCenter, yCenter);
+
+                    tooltip.style('opacity', 1)
+                        .html(`
+                            <strong>Turnovers in Zone: ${d.count}</strong><br>
+                            ${types}<br>
+                            <span style="color:#f1c40f;">Tactical zone: ${zoneLabel}</span>
+                        `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function () {
+                    d3.select(this)
+                        .attr('stroke', 'none');
+                    tooltip.style('opacity', 0);
+                })
+                .transition()
+                .duration(800)
+                .attr('opacity', 0.6);
+
+            // Add larger, clearer scatter points on top
+            const points = g.append('g')
+                .attr('class', 'points')
+                .selectAll('circle')
+                .data(data)
+                .join('circle')
+                .attr('cx', d => Math.min(Math.max(scaleX(d.x), 10), width - 10)) // Keep within bounds
+                .attr('cy', d => Math.min(Math.max(scaleY(d.y), 10), height - 10)) // Keep within bounds
+                .attr('r', 0)
+                .attr('fill', d => eventColors[d.type] || '#95a5a6')
+                .attr('stroke', 'white')
+                .attr('stroke-width', 2)
+                .attr('opacity', 0.85)
+                .style('cursor', 'pointer')
+                .on('mouseover', function (event, d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('r', 10)
+                        .attr('stroke-width', 3);
+
+                    tooltip.style('opacity', 1)
+                        .html(`
+                            <strong>${d.type}</strong><br>
+                            Player: ${d.player}<br>
+                            Team: ${d.team}<br>
+                            Minute: ${d.minute}'<br>
+                            Location: (${d.x.toFixed(1)}, ${d.y.toFixed(1)})
+                        `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function () {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('r', 6)
+                        .attr('stroke-width', 2);
+
+                    tooltip.style('opacity', 0);
+                });
+
+            // Animate points appearing
+            points.transition()
+                .duration(1000)
+                .delay((d, i) => Math.min(i * 5, 2000))
+                .attr('r', 6);
+
+            // Add legend (outside pitch on the right)
+            const legend = svg.append('g')
+                .attr('class', 'legend')
+                .attr('transform', `translate(${width + margin.left + 20}, ${margin.top + 60})`);
+
+            // Add background box for legend
+            const legendItems = Object.entries(eventColors);
+            legend.append('rect')
+                .attr('x', -10)
+                .attr('y', -36)
+                .attr('width', 120)
+                .attr('height', legendItems.length * 25 + 100)
+                .attr('fill', 'rgba(0, 0, 0, 0.7)')
+                .attr('rx', 5);
+
+            // Add legend title
+            legend.append('text')
+                .attr('x', 0)
+                .attr('y', -15)
+                .attr('fill', 'white')
+                .attr('font-weight', 'bold')
+                .attr('font-size', '14px')
+                .text('Turnover Types');
+
+            legendItems.forEach(([type, color], i) => {
+                const item = legend.append('g')
+                    .attr('class', 'legend-item')
+                    .attr('transform', `translate(0, ${i * 25})`)
+                    .style('cursor', 'pointer')
+                    .on('click', function () {
+                        const isActive = !d3.select(this).classed('inactive');
+                        d3.select(this).classed('inactive', isActive);
+
+                        points.filter(d => d.type === type)
+                            .transition()
+                            .duration(300)
+                            .attr('opacity', isActive ? 0 : 0.8);
+                    });
+
+                item.append('circle')
+                    .attr('r', 6)
+                    .attr('fill', color);
+
+                item.append('text')
+                    .attr('x', 15)
+                    .attr('y', 4)
+                    .text(type)
+                    .attr('fill', 'white');
+            });
+
+            // Add grid intensity legend
+            const intensityLegend = legend.append('g')
+                .attr('transform', `translate(0, ${legendItems.length * 25 + 20})`);
+
+            intensityLegend.append('text')
+                .attr('x', 0)
+                .attr('y', 0)
+                .text('Zone Intensity')
+                .attr('fill', 'white')
+                .attr('font-weight', 'bold')
+                .attr('font-size', '12px');
+
+            // Create gradient
+            const gradientId = 'intensity-gradient-viz1';
+            const defs = svg.append('defs');
+            const gradient = defs.append('linearGradient')
+                .attr('id', gradientId)
+                .attr('x1', '0%')
+                .attr('x2', '100%');
+
+            gradient.append('stop')
+                .attr('offset', '0%')
+                .attr('stop-color', intensityScale(0))
+                .attr('stop-opacity', 0.6);
+
+            gradient.append('stop')
+                .attr('offset', '100%')
+                .attr('stop-color', intensityScale(d3.max(gridData, d => d.count)))
+                .attr('stop-opacity', 0.6);
+
+            // Draw gradient bar
+            intensityLegend.append('rect')
+                .attr('x', 0)
+                .attr('y', 10)
+                .attr('width', 100)
+                .attr('height', 15)
+                .attr('fill', `url(#${gradientId})`)
+                .attr('stroke', 'white')
+                .attr('stroke-width', 1)
+                .attr('rx', 2);
+
+            // Add labels
+            intensityLegend.append('text')
+                .attr('x', 0)
+                .attr('y', 40)
+                .text('Low')
+                .attr('fill', 'white')
+                .attr('font-size', '10px');
+
+            intensityLegend.append('text')
+                .attr('x', 75)
+                .attr('y', 40)
+                .text('High')
+                .attr('fill', 'white')
+                .attr('font-size', '10px');
+
+            // Update stats
+            updateTurnoverStats(data);
+        }
+
+        function updateTurnoverStats(data) {
+            const statsContainer = d3.select('#turnover-stats');
+            statsContainer.selectAll('*').remove();
+
+            const totalTurnovers = data.length;
+            const byType = d3.rollup(data, v => v.length, d => d.type);
+            const mostCommonType = Array.from(byType.entries()).sort((a, b) => b[1] - a[1])[0];
+
+            const avgX = d3.mean(data, d => d.x);
+            const avgY = d3.mean(data, d => d.y);
+
+            const stats = [
+                { label: 'Total Turnovers', value: totalTurnovers },
+                { label: 'Most Common', value: mostCommonType[0] },
+                { label: 'Avg Position X', value: avgX.toFixed(1) + ' yds' },
+                { label: 'Avg Position Y', value: avgY.toFixed(1) + ' yds' }
+            ];
+
+            stats.forEach(stat => {
+                statsContainer.append('div')
+                    .attr('class', 'stat-card')
+                    .html(`
+                        <div class="stat-label">${stat.label}</div>
+                        <div class="stat-value">${stat.value}</div>
+                    `);
+            });
+        }
+
+        // Visualization 2: Shot Origin (with jittering + goal star shape)
+        function createShotVisualization(data) {
+            const container = d3.select('#shot-viz');
+            container.selectAll('*').remove();
+
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const { scaleX, scaleY } = drawPitch(g, width, height);
+
+            const tooltip = d3.select('#tooltip');
+
+            // Size scale for xG
+            const sizeScale = d3.scaleSqrt()
+                .domain([0, 1])
+                .range([6, 28]);
+
+            // Apply small jitter so overlapping shots remain legible
+            const jitterRadiusPx = 8;
+            const jitteredData = data.map(d => {
+                const angle = Math.random() * 2 * Math.PI;
+                const radius = Math.random() * jitterRadiusPx;
+                return {
+                    ...d,
+                    jitterOffsetX: radius * Math.cos(angle),
+                    jitterOffsetY: radius * Math.sin(angle)
+                };
+            });
+
+            const symbolGenerator = d3.symbol();
+
+            // Add shots as symbol paths (stars for goals, circles otherwise)
+            const shotsGroup = g.append('g')
+                .attr('class', 'shots');
+
+            const shots = shotsGroup.selectAll('g.shot')
+                .data(jitteredData)
+                .join('g')
+                .attr('class', d => `shot ${d.outcome === 'Goal' ? 'shot-goal' : 'shot-nongoal'}`)
+                .attr('transform', d => {
+                    const r = sizeScale(d.xG || 0.1);
+                    const baseX = Math.min(Math.max(scaleX(d.x), r + 2), width - r - 2);
+                    const baseY = Math.min(Math.max(scaleY(d.y), r + 2), height - r - 2);
+                    return `translate(${baseX + d.jitterOffsetX}, ${baseY + d.jitterOffsetY})`;
+                })
+                .style('cursor', 'pointer')
+                .style('opacity', 0)
+                .on('mouseover', function (event, d) {
+                    d3.select(this).select('path')
+                        .transition()
+                        .duration(200)
+                        .attr('stroke-width', d.outcome === 'Goal' ? 4 : 3)
+                        .attr('opacity', 1);
+
+                    tooltip.style('opacity', 1)
+                        .html(`
+                            <strong>${d.outcome}</strong><br>
+                            Player: ${d.player}<br>
+                            Team: ${d.team}<br>
+                            xG: ${(d.xG * 100).toFixed(1)}%<br>
+                            Technique: ${d.technique}<br>
+                            Minute: ${d.minute}'
+                        `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function (event, d) {
+                    d3.select(this).select('path')
+                        .transition()
+                        .duration(200)
+                        .attr('stroke-width', d.outcome === 'Goal' ? 2.5 : 1.5)
+                        .attr('opacity', 0.8);
+
+                    tooltip.style('opacity', 0);
+                });
+
+            shots.append('path')
+                .attr('d', d => symbolGenerator
+                    .type(d.outcome === 'Goal' ? d3.symbolStar : d3.symbolCircle)
+                    .size(Math.PI * Math.pow(sizeScale(d.xG || 0.1), 2))()
+                )
+                .attr('fill', d => shotColors[d.outcome] || '#95a5a6')
+                .attr('stroke', d => d.outcome === 'Goal' ? '#f1c40f' : 'white')
+                .attr('stroke-width', d => d.outcome === 'Goal' ? 2.5 : 1.5)
+                .attr('opacity', 0.85);
+
+            // Animate shots fading in
+            shots
+                .transition()
+                .duration(1000)
+                .delay((d, i) => i * 20)
+                .style('opacity', 0.8);
+
+            // Add legend (outside pitch on the right)
+            const legend = svg.append('g')
+                .attr('class', 'legend')
+                .attr('transform', `translate(${width + margin.left + 20}, ${margin.top + 60})`);
+
+            // Add background box for legend
+            const legendItems = Object.entries(shotColors);
+            const legendHeight = legendItems.length * 25 + 250; // Extra space for xG reference and title
+            legend.append('rect')
+                .attr('x', -10)
+                .attr('y', -35)
+                .attr('width', 120)
+                .attr('height', legendHeight)
+                .attr('fill', 'rgba(0, 0, 0, 0.7)')
+                .attr('rx', 5);
+
+            // Add legend title
+            legend.append('text')
+                .attr('x', 0)
+                .attr('y', -15)
+                .attr('fill', 'white')
+                .attr('font-weight', 'bold')
+                .attr('font-size', '14px')
+                .text('Shot Outcomes');
+
+            legendItems.forEach(([outcome, color], i) => {
+                const item = legend.append('g')
+                    .attr('class', 'legend-item')
+                    .attr('transform', `translate(0, ${i * 25})`)
+                    .style('cursor', 'pointer')
+                    .on('click', function () {
+                        const isActive = !d3.select(this).classed('inactive');
+                        d3.select(this).classed('inactive', isActive);
+
+                        shotsGroup.selectAll('g.shot').filter(d => d.outcome === outcome)
+                            .transition()
+                            .duration(300)
+                            .attr('opacity', isActive ? 0 : 0.7);
+                    });
+                // Use a star symbol for goals in the legend for consistency
+                if (outcome === 'Goal') {
+                    const legendSymbol = d3.symbol()
+                        .type(d3.symbolStar)
+                        .size(80);
+
+                    item.append('path')
+                        .attr('d', legendSymbol())
+                        .attr('fill', color)
+                        .attr('stroke', '#f1c40f')
+                        .attr('stroke-width', 1.5)
+                        .attr('transform', 'translate(0,1)');
+                } else {
+                    item.append('circle')
+                        .attr('r', 6)
+                        .attr('fill', color)
+                        .attr('stroke', 'white')
+                        .attr('stroke-width', 1);
+                }
+
+                item.append('text')
+                    .attr('x', 15)
+                    .attr('y', 4)
+                    .text(outcome)
+                    .attr('fill', 'white');
+            });
+
+            // Add xG reference circles
+            const xgReference = legend.append('g')
+                .attr('transform', `translate(0, ${legendItems.length * 25 + 20})`);
+
+            xgReference.append('text')
+                .attr('x', 50)
+                .attr('y', 0)
+                .attr('text-anchor', 'middle')
+                .text('xG Value')
+                .attr('fill', 'white')
+                .attr('font-weight', 'bold');
+
+            [0.1, 0.5, 0.9].forEach((xg, i) => {
+                const extraSpace = (i === 2) ? 10 : 0; // Add extra space for 90% circle
+                const g = xgReference.append('g')
+                    .attr('transform', `translate(40, ${i * 40 + 20 + extraSpace})`);
+
+                g.append('circle')
+                    .attr('r', sizeScale(xg))
+                    .attr('fill', 'none')
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 1.5);
+
+                g.append('text')
+                    .attr('x', sizeScale(0.9) + 10)
+                    .attr('y', 4)
+                    .text(`${(xg * 100).toFixed(0)}%`)
+                    .attr('fill', 'white');
+            });
+
+            updateShotStats(data);
+        }
+
+        function updateShotStats(data) {
+            const statsContainer = d3.select('#shot-stats');
+            statsContainer.selectAll('*').remove();
+
+            const totalShots = data.length;
+            const goals = data.filter(d => d.outcome === 'Goal').length;
+            const avgXG = d3.mean(data, d => d.xG);
+            const conversionRate = (goals / totalShots * 100).toFixed(1);
+
+            const stats = [
+                { label: 'Total Shots', value: totalShots },
+                { label: 'Goals', value: goals },
+                { label: 'Conversion Rate', value: conversionRate + '%' },
+                { label: 'Avg xG', value: (avgXG * 100).toFixed(1) + '%' }
+            ];
+
+            stats.forEach(stat => {
+                statsContainer.append('div')
+                    .attr('class', 'stat-card')
+                    .html(`
+                        <div class="stat-label">${stat.label}</div>
+                        <div class="stat-value">${stat.value}</div>
+                    `);
+            });
+        }
+
+        // Visualization 3: Defensive Actions - COMPLETELY REDESIGNED
+        function createDefensiveVisualization(data) {
+            const container = d3.select('#defensive-viz');
+            container.selectAll('*').remove();
+
+            const svg = container.append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const { scaleX, scaleY } = drawPitch(g, width, height);
+
+            const tooltip = d3.select('#tooltip');
+
+            // Draw defensive zones overlay (Low Block, Mid Press, High Press)
+            const zones = [
+                { name: 'Defensive Third', x: 0, width: width / 3, color: 'rgba(52, 152, 219, 0.1)' },
+                { name: 'Middle Third', x: width / 3, width: width / 3, color: 'rgba(155, 89, 182, 0.1)' },
+                { name: 'Attacking Third', x: 2 * width / 3, width: width / 3, color: 'rgba(231, 76, 60, 0.1)' }
+            ];
+
+            g.append('g')
+                .attr('class', 'zones')
+                .selectAll('rect')
+                .data(zones)
+                .join('rect')
+                .attr('x', d => d.x)
+                .attr('y', 0)
+                .attr('width', d => d.width)
+                .attr('height', height)
+                .attr('fill', d => d.color)
+                .attr('stroke', 'rgba(255, 255, 255, 0.3)')
+                .attr('stroke-width', 2)
+                .attr('stroke-dasharray', '5,5');
+
+            // Add zone labels
+            g.append('g')
+                .attr('class', 'zone-labels')
+                .selectAll('text')
+                .data(zones)
+                .join('text')
+                .attr('x', d => d.x + d.width / 2)
+                .attr('y', 20)
+                .attr('text-anchor', 'middle')
+                .attr('fill', 'white')
+                .attr('font-size', '14px')
+                .attr('font-weight', 'bold')
+                .attr('opacity', 0.7)
+                .text(d => d.name);
+
+            // Create larger, very visible defensive action points
+            const points = g.append('g')
+                .attr('class', 'points')
+                .selectAll('g')
+                .data(data)
+                .join('g')
+                .attr('class', d => `defensive-point ${d.success ? 'def-success' : 'def-fail'}`)
+                .attr('transform', d => {
+                    const x = Math.min(Math.max(scaleX(d.x), 10), width - 10);
+                    const y = Math.min(Math.max(scaleY(d.y), 10), height - 10);
+                    return `translate(${x},${y})`;
+                })
+                .style('cursor', 'pointer')
+                .on('mouseover', function (event, d) {
+                    d3.select(this).select('circle')
+                        .transition()
+                        .duration(200)
+                        .attr('r', 10)
+                        .attr('stroke-width', 4);
+
+                    tooltip.style('opacity', 1)
+                        .html(`
+                            <strong>${d.type}</strong><br>
+                            Player: ${d.player}<br>
+                            Team: ${d.team}<br>
+                            Success: ${d.success ? '<span style="color:#2ecc71">✓ Yes</span>' : '<span style="color:#e74c3c">✗ No</span>'}<br>
+                            Zone: ${d.zone}<br>
+                            Minute: ${d.minute}'
+                        `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', function () {
+                    d3.select(this).select('circle')
+                        .transition()
+                        .duration(200)
+                        .attr('r', 6)
+                        .attr('stroke-width', 2.5);
+
+                    tooltip.style('opacity', 0);
+                });
+
+            // Add circles with distinct styling:
+            // - Successful: solid fill in action color
+            // - Failed: hollow circle with red stroke
+            points.append('circle')
+                .attr('r', 0)
+                .attr('fill', d => d.success ? (defensiveColors[d.type] || '#95a5a6') : 'none')
+                .attr('stroke', d => d.success ? '#2ecc71' : '#e74c3c')
+                .attr('stroke-width', 2.5)
+                .attr('opacity', 0.9)
+                .transition()
+                .duration(1000)
+                .delay((d, i) => Math.min(i * 3, 2000))
+                .attr('r', 6);
+
+            // Add small intuitive icon for action type
+            points.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('y', 3)
+                .attr('fill', 'white')
+                .attr('font-size', '10px')
+                .attr('font-weight', 'bold')
+                .attr('pointer-events', 'none')
+                .attr('opacity', 0)
+                .text(d => defensiveIcons[d.type] || '•')
+                .transition()
+                .delay((d, i) => Math.min(i * 3, 2000) + 500)
+                .duration(500)
+                .attr('opacity', 0.95);
+
+            // Add legend (outside pitch on the right)
+            const legend = svg.append('g')
+                .attr('class', 'legend')
+                .attr('transform', `translate(${width + margin.left + 20}, ${margin.top + 60})`);
+
+            // Add background box for legend
+            const legendItems = Object.entries(defensiveColors);
+            const legendHeight = legendItems.length * 30 + 130; // Increased spacing and added icon legend
+            legend.append('rect')
+                .attr('x', -10)
+                .attr('y', -35)
+                .attr('width', 120)
+                .attr('height', legendHeight)
+                .attr('fill', 'rgba(0, 0, 0, 0.8)')
+                .attr('rx', 5);
+
+            // Add legend title
+            legend.append('text')
+                .attr('x', 0)
+                .attr('y', -15)
+                .attr('fill', 'white')
+                .attr('font-weight', 'bold')
+                .attr('font-size', '14px')
+                .text('Action Types');
+
+            legendItems.forEach(([type, color], i) => {
+                const item = legend.append('g')
+                    .attr('class', 'legend-item')
+                    .attr('transform', `translate(0, ${i * 30})`)
+                    .style('cursor', 'pointer')
+                    .on('click', function () {
+                        const isActive = !d3.select(this).classed('inactive');
+                        d3.select(this).classed('inactive', isActive);
+
+                        points.filter(d => d.type === type)
+                            .transition()
+                            .duration(300)
+                            .attr('opacity', isActive ? 0 : 1);
+                    });
+
+                // Action circle with icon
+                const iconGroup = item.append('g');
+                iconGroup.append('circle')
+                    .attr('r', 8)
+                    .attr('fill', color)
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 2);
+
+                iconGroup.append('text')
+                    .attr('text-anchor', 'middle')
+                    .attr('y', 3)
+                    .attr('fill', 'white')
+                    .attr('font-size', '10px')
+                    .attr('font-weight', 'bold')
+                    .text(defensiveIcons[type] || '•');
+
+                item.append('text')
+                    .attr('x', 20)
+                    .attr('y', 4)
+                    .text(type)
+                    .attr('fill', 'white')
+                    .attr('font-size', '12px');
+            });
+
+            // Add success/failure indicator (fill vs hollow)
+            const successIndicator = legend.append('g')
+                .attr('transform', `translate(0, ${legendItems.length * 30 + 15})`);
+
+            successIndicator.append('text')
+                .attr('x', 0)
+                .attr('y', 0)
+                .text('Fill / outline key:')
+                .attr('fill', 'white')
+                .attr('font-size', '12px')
+                .attr('font-weight', 'bold');
+
+            const successG = successIndicator.append('g')
+                .attr('transform', 'translate(0, 18)');
+
+            successG.append('circle')
+                .attr('r', 6)
+                .attr('fill', '#2ecc71')
+                .attr('stroke', '#2ecc71')
+                .attr('stroke-width', 2.5);
+
+            successG.append('text')
+                .attr('x', 15)
+                .attr('y', 4)
+                .text('Successful')
+                .attr('fill', 'white')
+                .attr('font-size', '11px');
+
+            const failG = successIndicator.append('g')
+                .attr('transform', 'translate(0, 40)');
+
+            failG.append('circle')
+                .attr('r', 6)
+                .attr('fill', 'none')
+                .attr('stroke', '#e74c3c')
+                .attr('stroke-width', 2.5);
+
+            failG.append('text')
+                .attr('x', 15)
+                .attr('y', 4)
+                .text('Failed')
+                .attr('fill', 'white')
+                .attr('font-size', '11px');
+
+            updateDefensiveStats(data);
+
+            // Apply current success/failed filters to avoid clutter
+            applyDefensiveVisibilityFilters();
+        }
+
+        // Apply success/failed visibility filters for defensive actions without re-rendering data
+        function applyDefensiveVisibilityFilters() {
+            const successfulCheckbox = document.getElementById('show-successful-def');
+            const failedCheckbox = document.getElementById('show-failed-def');
+
+            const showSuccessful = !successfulCheckbox || successfulCheckbox.checked;
+            const showFailed = !failedCheckbox || failedCheckbox.checked;
+
+            const points = d3.select('#defensive-viz').selectAll('.defensive-point');
+
+            points.each(function (d) {
+                const isSuccess = d.success;
+                const shouldShow = (isSuccess && showSuccessful) || (!isSuccess && showFailed);
+                d3.select(this).style('display', shouldShow ? null : 'none');
+            });
+        }
+
+        function updateDefensiveStats(data) {
+            const statsContainer = d3.select('#defensive-stats');
+            statsContainer.selectAll('*').remove();
+
+            const totalActions = data.length;
+            const successfulActions = data.filter(d => d.success).length;
+            const successRate = (successfulActions / totalActions * 100).toFixed(1);
+            const byZone = d3.rollup(data, v => v.length, d => d.zone);
+            const mostActiveZone = Array.from(byZone.entries()).sort((a, b) => b[1] - a[1])[0];
+
+            const stats = [
+                { label: 'Total Actions', value: totalActions },
+                { label: 'Successful', value: successfulActions },
+                { label: 'Success Rate', value: successRate + '%' },
+                { label: 'Most Active Zone', value: mostActiveZone[0] }
+            ];
+
+            stats.forEach(stat => {
+                statsContainer.append('div')
+                    .attr('class', 'stat-card')
+                    .html(`
+                        <div class="stat-label">${stat.label}</div>
+                        <div class="stat-value">${stat.value}</div>
+                    `);
+            });
+        }
+
+        // Initialize with sample data
+        let currentData = {
+            turnovers: generateSampleTurnoverData(),
+            shots: generateSampleShotData(),
+            defensive: generateSampleDefensiveData()
+        };
+
+        createTurnoverVisualization(currentData.turnovers);
+        createShotVisualization(currentData.shots);
+        createDefensiveVisualization(currentData.defensive);
+
+        // Hook up defensive success/failure visibility toggles
+        if (document.getElementById('show-successful-def')) {
+            document.getElementById('show-successful-def').addEventListener('change', applyDefensiveVisibilityFilters);
+        }
+        if (document.getElementById('show-failed-def')) {
+            document.getElementById('show-failed-def').addEventListener('change', applyDefensiveVisibilityFilters);
+        }
+
+        // File upload handler
+        document.getElementById('file-input').addEventListener('change', function (event) {
+            console.log('File input changed!'); // Debug log
+            const files = event.target.files;
+            console.log('Files selected:', files.length); // Debug log
+
+            if (files.length === 0) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                console.log('File loaded, parsing...'); // Debug log
+                try {
+                    const jsonData = JSON.parse(e.target.result);
+                    console.log('Loaded StatsBomb data:', jsonData);
+                    console.log('Turnovers:', jsonData.turnovers?.length);
+                    console.log('Shots:', jsonData.shots?.length);
+                    console.log('Defensive:', jsonData.defensive?.length);
+
+                    // Update current data with loaded data
+                    if (jsonData.turnovers && jsonData.shots && jsonData.defensive) {
+                        // Update the global data object
+                        currentData.turnovers = jsonData.turnovers;
+                        currentData.shots = jsonData.shots;
+                        currentData.defensive = jsonData.defensive;
+
+                        // Update match selector if metadata is available
+                        if (jsonData.metadata) {
+                            const matchSelect = d3.select('#match-select');
+                            matchSelect.selectAll('option').remove();
+
+                            const teams = jsonData.metadata.teams || ['Team 1', 'Team 2'];
+                            const matchLabel = `${teams[0]} vs ${teams[1]}`;
+                            const competition = jsonData.metadata.competition ? ` (${jsonData.metadata.competition})` : '';
+
+                            matchSelect.append('option')
+                                .attr('value', 'loaded')
+                                .text(matchLabel + competition);
+                        }
+
+                        // Update team selector if metadata is available
+                        if (jsonData.metadata && jsonData.metadata.teams) {
+                            const teamSelect = d3.select('#team-select');
+                            teamSelect.selectAll('option').remove();
+
+                            teamSelect.append('option')
+                                .attr('value', 'all')
+                                .text('Both Teams');
+
+                            jsonData.metadata.teams.forEach((team, index) => {
+                                teamSelect.append('option')
+                                    .attr('value', 'team' + (index + 1))
+                                    .text(team);
+                            });
+                        }
+
+                        // Clear existing visualizations first
+                        console.log('Clearing old visualizations...'); // Debug log
+                        d3.select('#turnover-viz').selectAll('*').remove();
+                        d3.select('#shot-viz').selectAll('*').remove();
+                        d3.select('#defensive-viz').selectAll('*').remove();
+
+                        // Recreate all visualizations with new data
+                        console.log('Creating new visualizations...'); // Debug log
+                        if (currentData.turnovers.length > 0) {
+                            console.log('Creating turnover viz with', currentData.turnovers.length, 'events'); // Debug log
+                            createTurnoverVisualization(currentData.turnovers);
+                        } else {
+                            d3.select('#turnover-viz').html('<p style="text-align:center; color:#666; padding:40px;">No turnover data available for this match.</p>');
+                        }
+
+                        if (currentData.shots.length > 0) {
+                            console.log('Creating shot viz with', currentData.shots.length, 'events'); // Debug log
+                            createShotVisualization(currentData.shots);
+                        } else {
+                            d3.select('#shot-viz').html('<p style="text-align:center; color:#666; padding:40px;">No shot data available for this match.</p>');
+                        }
+
+                        if (currentData.defensive.length > 0) {
+                            console.log('Creating defensive viz with', currentData.defensive.length, 'events'); // Debug log
+                            createDefensiveVisualization(currentData.defensive);
+                        } else {
+                            d3.select('#defensive-viz').html('<p style="text-align:center; color:#666; padding:40px;">No defensive action data available for this match.</p>');
+                        }
+
+                        console.log('All visualizations created!'); // Debug log
+
+                        // Show success message
+                        const eventCount = jsonData.turnovers.length + jsonData.shots.length + jsonData.defensive.length;
+                        alert(`✓ Successfully loaded data!\n\nEvents processed:\n- ${jsonData.turnovers.length} turnovers\n- ${jsonData.shots.length} shots\n- ${jsonData.defensive.length} defensive actions\n\nTotal: ${eventCount} events`);
+                    } else {
+                        console.error('Invalid data format - missing required fields'); // Debug log
+                        console.log('Data has turnovers?', !!jsonData.turnovers);
+                        console.log('Data has shots?', !!jsonData.shots);
+                        console.log('Data has defensive?', !!jsonData.defensive);
+                        alert('Invalid data format. Please upload a combined_data.json file from the processed_data folder.');
+                    }
+                } catch (error) {
+                    console.error('Error parsing JSON:', error); // Debug log
+                    alert('Error parsing JSON file: ' + error.message);
+                    console.error('Error details:', error);
+                }
+            };
+            reader.readAsText(files[0]);
+        });
+
+        // Team filter
+        d3.select('#team-select').on('change', function () {
+            const selectedValue = this.value;
+
+            let filteredTurnovers = currentData.turnovers;
+            let filteredShots = currentData.shots;
+            let filteredDefensive = currentData.defensive;
+
+            if (selectedValue !== 'all') {
+                // Get the actual team name from the selected option text
+                const selectedOption = d3.select(this).select('option:checked');
+                const teamName = selectedOption.text();
+
+                filteredTurnovers = currentData.turnovers.filter(d => d.team === teamName);
+                filteredShots = currentData.shots.filter(d => d.team === teamName);
+                filteredDefensive = currentData.defensive.filter(d => d.team === teamName);
+            }
+
+            // Clear existing visualizations and recreate with filtered data
+            d3.select('#turnover-viz').selectAll('*').remove();
+            d3.select('#shot-viz').selectAll('*').remove();
+            d3.select('#defensive-viz').selectAll('*').remove();
+
+            if (filteredTurnovers.length > 0) {
+                createTurnoverVisualization(filteredTurnovers);
+            } else {
+                d3.select('#turnover-viz').html('<p style="text-align:center; color:#666; padding:40px;">No turnover data for selected filter.</p>');
+            }
+
+            if (filteredShots.length > 0) {
+                createShotVisualization(filteredShots);
+            } else {
+                d3.select('#shot-viz').html('<p style="text-align:center; color:#666; padding:40px;">No shot data for selected filter.</p>');
+            }
+
+            if (filteredDefensive.length > 0) {
+                createDefensiveVisualization(filteredDefensive);
+            } else {
+                d3.select('#defensive-viz').html('<p style="text-align:center; color:#666; padding:40px;">No defensive action data for selected filter.</p>');
+            }
+        });
+    </script>
+</body>
+
+</html>
